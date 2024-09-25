@@ -1,0 +1,85 @@
+import cv2
+import numpy as np
+import tensorflow as tf
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import accuracy_score
+import matplotlib.pyplot as plt
+
+# Step 1: Load Image (Simulating this step with random images for example)
+def load_image(path):
+    return cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+
+# Load sample images
+image1 = load_image('image1.png')
+image2 = load_image('image2.png')
+
+# Step 2: Preprocessing - Denoising, Enhancing, Resizing
+def preprocess_image(img):
+    img = cv2.GaussianBlur(img, (5, 5), 0)
+    img = cv2.resize(img, (256, 256))
+    return img
+
+preprocessed_img1 = preprocess_image(image1)
+preprocessed_img2 = preprocess_image(image2)
+
+# Step 3: Optical Flow Analysis (Farneback method)
+def calculate_optical_flow(img1, img2):
+    flow = cv2.calcOpticalFlowFarneback(img1, img2, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+    return flow
+
+flow = calculate_optical_flow(preprocessed_img1, preprocessed_img2)
+
+# Step 4: Feature Extraction - Flow Vectors (velocity components)
+def extract_flow_features(flow):
+    magnitude, angle = cv2.cartToPolar(flow[..., 0], flow[..., 1])
+    return magnitude, angle
+
+magnitude, angle = extract_flow_features(flow)
+
+# Step 5: Machine Learning - Simple Classification using TensorFlow
+# Assuming we have labels for normal and abnormal flow (for the example)
+X = np.array([magnitude.flatten(), angle.flatten()]).T
+y = np.array(['normal', 'abnormal'])  # Example labels
+
+# Encode labels
+le = LabelEncoder()
+y_encoded = le.fit_transform(y)
+
+# Split data for training and testing
+X_train, X_test, y_train, y_test = train_test_split(X, y_encoded, test_size=0.2, random_state=42)
+
+# Build a simple neural network
+model = tf.keras.models.Sequential([
+    tf.keras.layers.Dense(64, input_dim=X_train.shape[1], activation='relu'),
+    tf.keras.layers.Dense(32, activation='relu'),
+    tf.keras.layers.Dense(2, activation='softmax')
+])
+
+model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
+# Train the model
+model.fit(X_train, y_train, epochs=10, batch_size=32)
+
+# Evaluate the model
+y_pred = model.predict(X_test)
+y_pred_labels = np.argmax(y_pred, axis=1)
+
+# Step 6: Performance Evaluation
+accuracy = accuracy_score(y_test, y_pred_labels)
+print(f'Accuracy: {accuracy * 100:.2f}%')
+
+# Step 7: Visualization of Flow
+def visualize_flow(flow, img):
+    hsv = np.zeros_like(cv2.cvtColor(img, cv2.COLOR_GRAY2BGR))
+    hsv[..., 1] = 255
+    magnitude, angle = cv2.cartToPolar(flow[..., 0], flow[..., 1])
+    hsv[..., 0] = angle * 180 / np.pi / 2
+    hsv[..., 2] = cv2.normalize(magnitude, None, 0, 255, cv2.NORM_MINMAX)
+    bgr_flow = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+    
+    plt.imshow(bgr_flow)
+    plt.title('Optical Flow')
+    plt.show()
+
+visualize_flow(flow, preprocessed_img1)
